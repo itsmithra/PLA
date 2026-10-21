@@ -14,6 +14,10 @@ import {
   Sparkles,
   FileText,
   Share2,
+  Send,
+  Bot,
+  Brain,
+  MessageSquare,
 } from "lucide-react";
 import { Sidebar } from "@/components/sidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,6 +41,13 @@ export default function LearnTopicPage() {
   const [aiSummary, setAiSummary] = useState<{ summary: string; keyTakeaways: string[] } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Socratic Tutor State
+  const [tutorMessages, setTutorMessages] = useState<
+    Array<{ role: "user" | "assistant"; content: string; goal?: string }>
+  >([]);
+  const [tutorInput, setTutorInput] = useState("");
+  const [isTutorThinking, setIsTutorThinking] = useState(false);
+
   useEffect(() => {
     const loadTopic = async () => {
       setIsLoading(true);
@@ -55,12 +66,84 @@ export default function LearnTopicPage() {
         provider.generateTopicSummary(t).then((s) => {
           setAiSummary({ summary: s.summary, keyTakeaways: s.keyTakeaways });
         });
+
+        // Initialize Socratic Tutor greeting
+        setTutorMessages([
+          {
+            role: "assistant",
+            content: `Greetings! I am the Knowvexa Cognitive Socratic Tutor. Rather than feeding rote answers, I engage through Socratic dialogue and mental model calibration. Where shall we start exploring "${t.title}" from first principles?`,
+            goal: "Establish Socratic calibration and baseline comprehension",
+          },
+        ]);
       }
       setIsLoading(false);
     };
 
     loadTopic();
   }, [topicId]);
+
+  const handleSendSocraticMessage = async (textToSend?: string) => {
+    const text = (textToSend || tutorInput).trim();
+    if (!text || !topic || isTutorThinking) return;
+
+    const userMsg = { role: "user" as const, content: text };
+    const newHistory = [...tutorMessages, userMsg];
+    setTutorMessages(newHistory);
+    setTutorInput("");
+    setIsTutorThinking(true);
+
+    try {
+      const res = await fetch("/api/ai/tutor", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topicId: topic.id,
+          userMessage: text,
+          conversationHistory: newHistory.map((m) => ({ role: m.role, content: m.content })),
+          studentMasteryScore: mastery?.mastery_score || 50,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setTutorMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: `${data.reply}\n\n👉 **Guiding Question:** ${data.guiding_question}`,
+            goal: data.pedagogical_goal,
+          },
+        ]);
+      } else {
+        const provider = getAIProvider();
+        const fallback = await provider.conductSocraticDialogue({
+          topic,
+          userMessage: text,
+          conversationHistory: newHistory.map((m) => ({ role: m.role, content: m.content })),
+          studentMasteryScore: mastery?.mastery_score || 50,
+        });
+        setTutorMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: `${fallback.reply}\n\n👉 **Guiding Question:** ${fallback.guiding_question}`,
+            goal: fallback.pedagogical_goal,
+          },
+        ]);
+      }
+    } catch {
+      setTutorMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "Let's reflect on the core invariants for this topic. What does the initial state imply before execution begins?",
+          goal: "Socratic state reflection",
+        },
+      ]);
+    } finally {
+      setIsTutorThinking(false);
+    }
+  };
 
   const handleMarkAsCompleted = async () => {
     setIsCompleted(true);
@@ -296,6 +379,125 @@ export default function LearnTopicPage() {
             </div>
           </div>
         )}
+
+        {/* 6.5 COGNITIVE SOCRATIC AI TUTOR */}
+        <div className="space-y-4 rounded-2xl bg-gradient-to-br from-indigo-50/70 via-white to-purple-50/70 dark:from-slate-900 dark:via-slate-900/90 dark:to-indigo-950/40 p-5 sm:p-6 border border-indigo-100 dark:border-indigo-900/50 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-indigo-100/80 dark:border-indigo-900/60 pb-4">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
+                <Brain className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Knowvexa Socratic Cognitive Tutor
+                  </h3>
+                  <Badge variant="purple" size="sm">
+                    Bloom Level: Apply & Analyze
+                  </Badge>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Pedagogical reasoning engine • Socratic mental model calibration
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400">
+              <Sparkles className="w-3.5 h-3.5" /> First-Principles Dialogue
+            </div>
+          </div>
+
+          {/* Quick Starter Prompts */}
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            <span className="text-[11px] font-semibold text-slate-500 self-center mr-1">
+              Quick explore:
+            </span>
+            {[
+              "Why do students often fail this topic?",
+              "Give me a real-world computational analogy",
+              "Challenge my mental model with an edge case",
+              "Break this down to its simplest first principle",
+            ].map((prompt, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => handleSendSocraticMessage(prompt)}
+                disabled={isTutorThinking}
+                className="text-[11px] px-2.5 py-1 rounded-full bg-white dark:bg-slate-800 border border-indigo-100 dark:border-indigo-800/60 text-slate-700 dark:text-slate-300 hover:border-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors shadow-2xs disabled:opacity-50"
+              >
+                {prompt}
+              </button>
+            ))}
+          </div>
+
+          {/* Chat Messages */}
+          <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+            {tutorMessages.map((msg, i) => (
+              <div
+                key={i}
+                className={`flex gap-2.5 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+              >
+                {msg.role === "assistant" && (
+                  <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                    <Bot className="w-4 h-4" />
+                  </div>
+                )}
+                <div
+                  className={`max-w-[85%] rounded-2xl px-4 py-3 text-xs leading-relaxed ${
+                    msg.role === "user"
+                      ? "bg-indigo-600 text-white shadow-xs rounded-tr-xs"
+                      : "bg-white dark:bg-slate-800/90 text-slate-800 dark:text-slate-200 border border-slate-200/70 dark:border-slate-700/60 shadow-xs rounded-tl-xs space-y-1.5"
+                  }`}
+                >
+                  {msg.goal && (
+                    <div className="text-[10px] uppercase font-bold tracking-wider text-indigo-500 dark:text-indigo-400 pb-0.5">
+                      Pedagogical Focus: {msg.goal}
+                    </div>
+                  )}
+                  <div className="whitespace-pre-line">{msg.content}</div>
+                </div>
+              </div>
+            ))}
+
+            {isTutorThinking && (
+              <div className="flex gap-2.5 justify-start">
+                <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Bot className="w-4 h-4" />
+                </div>
+                <div className="rounded-2xl rounded-tl-xs px-4 py-3 bg-white dark:bg-slate-800/90 text-xs text-slate-500 border border-slate-200/70 dark:border-slate-700/60 shadow-xs flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse" />
+                  <span>Constructing Socratic scaffolding...</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Input Form */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSendSocraticMessage();
+            }}
+            className="flex items-center gap-2 pt-2"
+          >
+            <input
+              type="text"
+              value={tutorInput}
+              onChange={(e) => setTutorInput(e.target.value)}
+              placeholder={`Ask a question or explain your reasoning about ${topic.title}...`}
+              disabled={isTutorThinking}
+              className="flex-1 px-3.5 py-2.5 rounded-xl text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+            />
+            <Button
+              type="submit"
+              variant="primary"
+              size="md"
+              disabled={isTutorThinking || !tutorInput.trim()}
+              className="shrink-0"
+            >
+              <Send className="w-3.5 h-3.5 mr-1" /> Ask Tutor
+            </Button>
+          </form>
+        </div>
 
         {/* 7. ACTION CONTROLS & RECOMMENDED NEXT ACTIVITY */}
         <div className="p-6 rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">

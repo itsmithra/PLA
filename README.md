@@ -8,14 +8,17 @@ Knowvexa AI is a production-minded, AI-powered personalized learning platform th
 
 ## 1. Architectural Highlights
 
-- **Next.js 14 App Router & TypeScript:** Strict type-safety across components, server routes, and data transfer objects.
-- **Tailwind CSS Design System:** Custom semantic palette tailored for modern educational SaaS (soft neutral surfaces, deep navy text, indigo/purple accents, accessible contrast).
+- **Next.js 14 App Router & TypeScript:** Strict type-safety across components, server routes, middleware, and data transfer objects.
+- **Ultra-Fast AI Engine (`GroqProvider` & `GeminiProvider`):** 
+  - **Groq LPU Acceleration:** Sub-second inference powered by Groq OpenAI-compatible API (`qwen/qwen3.8-27b`, `openai/gpt-oss-120b`), providing real-time quiz generation, pedagogical explanations, and study recommendations.
+  - **Google Gemini 1.5 Flash Integration:** Multi-token structured JSON generation with system prompt grounding.
+  - **Deterministic Rule Fallback (`MockAIProvider`):** Automatic graceful offline demo mode if API keys are absent or rate-limited.
 - **Deterministic Topic Mastery Engine:** 0–100 scale calculation using an adaptive evidence-weighting formula ($\alpha = \max(0.20, \frac{1}{\sqrt{k+1}})$), difficulty multipliers, and temporal decay heuristic.
 - **Topological Study Planner:** Schedules daily learning blocks that respect prerequisite relationships, exam countdowns, weak topic prioritization, and daily time constraints without cognitive overload.
-- **AI Service Abstraction (`AIProvider`):** Dual-mode provider featuring live Google Gemini API (`GeminiProvider`) and a rule-grounded educational fallback (`MockAIProvider`) for offline demo development.
-- **Supabase Architecture & Row Level Security (RLS):** Complete schema migrations, indexes, and strict multi-tenant data ownership policies preventing cross-user data access.
-- **Server-Scored Quiz Engine:** Correct answers are stored on the server and omitted from client payloads to eliminate devtools inspection vulnerabilities.
-- **Vitest Test Suite:** 22 automated tests covering mastery calculations, scheduler topological ordering, answer security, repository operations, and Zod output validation.
+- **Supabase Architecture & Row Level Security (RLS):** Complete schema migrations, indexes, and strict multi-tenant data ownership policies (`auth.uid() = user_id`) with `@supabase/ssr` session synchronization middleware.
+- **Server-Scored Quiz Engine:** Correct answers are evaluated on the server and omitted from client payloads to eliminate devtools inspection vulnerabilities.
+- **Vercel Production Ready:** `vercel.json` configured with Next.js framework, automatic build, region specification, and serverless timeout allowances (`maxDuration: 30`) for AI workloads.
+- **Vitest Test Suite:** 23 automated unit and security tests covering mastery calculations, scheduler topological ordering, answer security, AI provider schema enforcement, and repository operations.
 
 ---
 
@@ -23,19 +26,57 @@ Knowvexa AI is a production-minded, AI-powered personalized learning platform th
 
 | Layer | Technologies |
 |---|---|
-| **Framework** | Next.js 14 (App Router, Server Actions, Route Handlers) |
+| **Framework** | Next.js 14 (App Router, Server Components, Route Handlers, Edge Middleware) |
 | **Language** | TypeScript (Strict mode enabled) |
-| **Styling** | Tailwind CSS with custom theme extensions |
-| **Icons & UI** | Lucide React, semantic badges, cards, progress bars |
-| **Database** | Supabase PostgreSQL with Row Level Security (RLS) |
-| **Authentication** | Supabase Auth with session persistence & demo provider |
-| **AI Integration** | Google Gemini 1.5 Flash + deterministic mock fallback |
+| **Styling** | Tailwind CSS with semantic educational palette |
+| **Icons & UI** | Lucide React, glassmorphism badges, cards, interactive progress bars |
+| **Database & Auth** | Supabase PostgreSQL with Row Level Security (RLS) & `@supabase/ssr` |
+| **AI Acceleration** | Groq LPU (`qwen/qwen3.8-27b`, `openai/gpt-oss-120b`) + Google Gemini 1.5 Flash |
 | **Validation** | Zod input and output schema enforcement |
-| **Testing** | Vitest with fast in-memory execution |
+| **Deployment** | Vercel (`vercel.json` with Next.js optimization & extended timeouts) |
+| **Testing** | Vitest with fast in-memory execution (100% test pass rate) |
 
 ---
 
-## 3. Directory Structure
+## 3. AI Capabilities & Endpoints
+
+Knowvexa AI features a modular, pluggable AI provider architecture (`src/lib/ai/provider.ts`):
+
+```
+┌────────────────────────────────────────────────────────┐
+│                   getAIProvider()                      │
+└──────────────────────────┬─────────────────────────────┘
+                           │
+         ┌─────────────────┼──────────────────┐
+         ▼                 ▼                  ▼
+┌─────────────────┐ ┌───────────────┐ ┌───────────────────┐
+│  GroqProvider   │ │ GeminiProvider│ │  MockAIProvider   │
+│ (Groq LPU Fast) │ │ (Gemini 1.5)  │ │ (Deterministic)   │
+└─────────────────┘ └───────────────┘ └───────────────────┘
+```
+
+### 1. Available Endpoints
+
+- **`GET /api/ai/status`**: Returns the active AI provider, model status, and supported capabilities.
+- **`POST /api/ai/quiz`**: Dynamically generates tailored diagnostic assessments with multiple-choice questions, distractors, and pedagogical rationales.
+  ```json
+  { "topicId": "py-control-flow", "count": 3 }
+  ```
+- **`POST /api/ai/explain`**: Generates context-aware, Socratic explanations for missed questions without simply reciting the answer key.
+  ```json
+  {
+    "questionText": "What is the runtime complexity of hash table lookup in Python?",
+    "userAnswer": "O(N)",
+    "correctAnswer": "O(1) average",
+    "topicTitle": "Python Data Structures"
+  }
+  ```
+- **`GET /api/ai/recommend`**: Synthesizes a student's weak mastery areas, recent quiz attempts, and exam timeline into prioritized study actions.
+- **`POST /api/ai/summary`**: Generates quick-revision summaries, core takeaways, and Markdown cheat sheets for any curriculum topic.
+
+---
+
+## 4. Directory Structure
 
 ```
 ├── src/
@@ -57,48 +98,38 @@ Knowvexa AI is a production-minded, AI-powered personalized learning platform th
 │   │   ├── progress/page.tsx                # Mastery distribution & weekly trends
 │   │   ├── resources/page.tsx               # Verified documentation bookmarks
 │   │   ├── settings/page.tsx                # Learning preferences & demo reset
+│   │   ├── supabase-test/page.tsx           # Live Supabase connection test page
 │   │   ├── api/
 │   │   │   ├── assessment/submit/route.ts   # Server-side assessment scoring
+│   │   │   ├── ai/status/route.ts           # Active AI engine & provider status
+│   │   │   ├── ai/quiz/route.ts             # Dynamic AI quiz question generator
 │   │   │   ├── ai/recommend/route.ts        # AI study recommendations
-│   │   │   └── ai/explain/route.ts          # AI incorrect answer explanation
+│   │   │   ├── ai/explain/route.ts          # AI incorrect answer explanation
+│   │   │   └── ai/summary/route.ts          # Topic cheat sheet & summary
 │   │   ├── globals.css                      # Design tokens & glassmorphism
 │   │   └── layout.tsx                       # Root layout with responsive navbar
-│   ├── components/
-│   │   ├── ui/                              # Button, Card, Badge, Input, Progress
-│   │   ├── navbar.tsx                       # Top navigation with mobile drawer
-│   │   ├── sidebar.tsx                      # Student workspace sidebar
-│   │   ├── footer.tsx                       # System status and tech stack badges
-│   │   └── demo-badge.tsx                   # Transparency indicator
-│   ├── data/
-│   │   └── seed-data.ts                     # Pre-seeded curriculum for 4 domains
+│   ├── components/                          # UI primitives, navbar, sidebar, footer
+│   ├── data/seed-data.ts                    # Pre-seeded curriculum for 4 domains
 │   ├── lib/
-│   │   ├── mastery/
-│   │   │   ├── engine.ts                    # Deterministic mastery calculation
-│   │   │   └── __tests__/engine.test.ts     # Mastery unit tests
-│   │   ├── planner/
-│   │   │   ├── scheduler.ts                 # Topological study plan generator
-│   │   │   └── __tests__/scheduler.test.ts  # Scheduler unit tests
-│   │   ├── ai/
-│   │   │   ├── provider.ts                  # Gemini and Mock AI providers
-│   │   │   └── __tests__/provider.test.ts   # AI schema validation tests
-│   │   ├── storage/
-│   │   │   ├── index.ts                     # Repository layer & browser storage
-│   │   │   └── __tests__/repository.test.ts # Quiz workflow tests
-│   │   └── __tests__/security.test.ts       # Security and answer leakage tests
-│   └── types/
-│       └── index.ts                         # Complete TypeScript interfaces
+│   │   ├── mastery/engine.ts                # Deterministic mastery calculation
+│   │   ├── planner/scheduler.ts             # Topological study plan generator
+│   │   ├── ai/provider.ts                   # Groq, Gemini and Mock AI providers
+│   │   └── storage/index.ts                 # Dual Supabase & browser repository
+│   ├── utils/supabase/                      # SSR, Client, and Middleware helpers
+│   ├── middleware.ts                        # Edge auth session refreshing
+│   └── types/index.ts                       # Complete TypeScript interfaces
 ├── supabase/
-│   ├── migrations/
-│   │   └── 20260101000000_initial_schema.sql # PostgreSQL schema & RLS policies
+│   ├── migrations/20260101000000_initial_schema.sql # PostgreSQL schema & RLS policies
 │   └── seed.sql                             # Database seed script
 ├── .env.example                             # Environment configuration template
+├── vercel.json                              # Vercel deployment configuration
 ├── vitest.config.ts                         # Test runner configuration
 └── tailwind.config.ts                       # UI theme tokens
 ```
 
 ---
 
-## 4. Setup & Local Development
+## 5. Setup & Local Development
 
 ### Prerequisites
 - Node.js `v18+` or `v20+` or `v24+`
@@ -106,49 +137,61 @@ Knowvexa AI is a production-minded, AI-powered personalized learning platform th
 
 ### Installation
 ```bash
-# Clone or navigate to the project directory
-cd c:\Users\ELCOT\Documents\JS_Corp\PLA
+# Clone the repository
+git clone https://github.com/itsmithra/PLA.git
+cd PLA
 
 # Install dependencies
 npm install
 ```
 
-### Local Demonstration Mode (Zero Setup Required)
-Knowvexa AI includes a zero-configuration demonstration mode that activates automatically when cloud credentials are not supplied:
+### Demonstration Mode (Zero Cloud Configuration)
+Knowvexa AI operates out of the box with zero external configuration:
 ```bash
-# Start local development server
 npm run dev
 ```
-Open [http://localhost:3000](http://localhost:3000) in your browser.
-- Click **"Sign In"** -> **"One-Click Demo Student Sign In"** to inspect a pre-populated student profile (Alex Rivera) with real quiz attempts, mastery scores, and scheduled tasks.
+Open [http://localhost:3000](http://localhost:3000) in your browser:
+- Click **"Sign In"** -> **"One-Click Demo Student Sign In"** to inspect pre-populated student analytics (Alex Rivera) with real quiz attempts, mastery scores, and scheduled tasks.
 - Or click **"Start Free Diagnostic"** -> **"Register"** to experience the 3-step onboarding flow.
 
 ---
 
-## 5. Environment Variables Configuration
+## 6. Environment Variables Configuration
 
-Copy `.env.example` to `.env.local` to enable cloud Supabase and live Gemini AI:
+Copy `.env.example` to `.env.local`:
 ```bash
 cp .env.example .env.local
 ```
 
 ```ini
-# Supabase Configuration (Optional for demo, required for live multi-tenant cloud)
+# -------------------------------------------------------------
+# Supabase Configuration
+# -------------------------------------------------------------
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-key-here
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-or-publishable-key-here
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
 
-# Google Gemini Generative AI (Optional, falls back to MockAIProvider if absent)
+# -------------------------------------------------------------
+# AI Providers (Groq LPU or Google Gemini)
+# -------------------------------------------------------------
+GROQ_API=your-groq-api-key-here
+# Optional model override (defaults to qwen/qwen3.8-27b or openai/gpt-oss-120b)
+GROQ_MODEL=qwen/qwen3.8-27b
+
+# Google Gemini API (Alternative AI Provider)
 GEMINI_API_KEY=your-gemini-api-key-here
 
+# -------------------------------------------------------------
 # Application Configuration
+# -------------------------------------------------------------
 NEXT_PUBLIC_APP_URL=http://localhost:3000
-NEXT_PUBLIC_DEMO_MODE=true
+NEXT_PUBLIC_DEMO_MODE=false
 ```
 
 ---
 
-## 6. Supabase Database Migration & RLS Setup
+## 7. Supabase Database Migration & RLS Setup
 
 When connecting to a live Supabase instance:
 1. Navigate to your Supabase project's **SQL Editor**.
@@ -160,45 +203,30 @@ When connecting to a live Supabase instance:
 
 ---
 
-## 7. Automated Test Suite
+## 8. Vercel Deployment
+
+This project is fully configured for zero-friction deployment to Vercel:
+
+1. Import repository `https://github.com/itsmithra/PLA` into your Vercel Dashboard.
+2. Select Framework Preset: **Next.js**.
+3. In **Project Settings -> Environment Variables**, add:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (or `NEXT_PUBLIC_SUPABASE_ANON_KEY`)
+   - `GROQ_API` (or `GROQ_API_KEY` / `GEMINI_API_KEY`)
+4. Click **Deploy**. Vercel will automatically run `npm run build` using the rules defined in `vercel.json`.
+
+---
+
+## 9. Automated Test Suite
 
 Run unit and security tests using Vitest:
 ```bash
 npm test
 ```
 
-### Test Coverage Highlights
-- `engine.test.ts`: Verifies initial baseline establishment, 4 mastery bands, weighted evidence update rule, advanced question bonus, and temporal forgetting decay.
-- `scheduler.test.ts`: Verifies weak topic prioritization, topological prerequisite sequencing, and strict adherence to daily minute limits.
-- `provider.test.ts`: Verifies Zod schema validation for AI questions and study recommendations.
-- `repository.test.ts`: Verifies client question sanitization, quiz scoring, and mastery score updates.
-- `security.test.ts`: Verifies absence of answer leakage, prevention of client score tampering, and deterministic 0–100 score clamping.
-
----
-
-## 8. Feature Checklist & Implementation Status
-
-| Feature Requirement | Status | Verification |
-|---|---|---|
-| Responsive Marketing Landing Page | ✅ Implemented | Verified on mobile, tablet, desktop |
-| Supabase Auth & Demo Reviewer Login | ✅ Implemented | Tested credential & 1-click demo entry |
-| 3-Step Profile Onboarding | ✅ Implemented | Collects track, subjects, exam date, daily mins |
-| 4 Curriculum Tracks (Python, SQL, Stats, DS) | ✅ Implemented | Pre-seeded with worked examples & pitfalls |
-| Topic Learning Page with Objectives & Examples | ✅ Implemented | Interactive hints, pitfalls & references |
-| Server-Scored Quiz Interface & Timer | ✅ Implemented | Answers withheld until server evaluation |
-| Detailed Results with Explanations | ✅ Implemented | Question review, explanations & mastery delta |
-| Deterministic Mastery Engine (0–100) | ✅ Implemented | Passed 8 unit tests in `engine.test.ts` |
-| Topological Study Planner & Rescheduling | ✅ Implemented | Passed 3 unit tests in `scheduler.test.ts` |
-| Gemini API AI Guidance + MockAI Fallback | ✅ Implemented | Passed 4 unit tests in `provider.test.ts` |
-| Analytics Dashboard with Real Persisted Metrics | ✅ Implemented | Computed from actual database attempts |
-| Saved Resources with Bookmarking Filter | ✅ Implemented | Search, category filtering, save persistence |
-| Row Level Security & Migration Scripts | ✅ Implemented | `20260101000000_initial_schema.sql` provided |
-| TypeScript Strict Compilation | ✅ Implemented | `tsc --noEmit` exits with 0 errors |
-| Next.js Production Build | ✅ Implemented | Successful production compilation |
-
----
-
-## 9. Known Limitations & Production Notes
-
-1. **Live Gemini Quotas:** If using a free-tier Gemini API key, rate limits may apply during rapid quiz generation. The application automatically intercepts rate-limit errors and falls back to deterministic curriculum questions without breaking the user experience.
-2. **Browser Local Storage:** In local demo mode, progress is persisted in browser storage and can be reset at any time via `/settings`. In production, set `NEXT_PUBLIC_DEMO_MODE=false` with your Supabase credentials to persist exclusively to PostgreSQL.
+### Test Coverage Highlights (23 Tests Passing)
+- `engine.test.ts` (8 tests): Baseline establishment, mastery bands, weighted evidence update rule, advanced question bonus, and temporal forgetting decay.
+- `scheduler.test.ts` (3 tests): Weak topic prioritization, topological prerequisite sequencing, and daily minute constraints.
+- `provider.test.ts` (5 tests): Zod schema validation for AI questions and study recommendations, plus automatic GroqProvider selection.
+- `repository.test.ts` (4 tests): Client question sanitization, quiz scoring, and mastery score updates.
+- `security.test.ts` (3 tests): Absence of answer leakage, prevention of client score tampering, and deterministic 0–100 score clamping.

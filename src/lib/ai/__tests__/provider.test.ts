@@ -84,4 +84,65 @@ describe("AI Service and Mock Provider", () => {
     expect(explanation).toContain("O(1)");
     expect(explanation).toContain("Data Structures");
   });
+
+  it("selects GroqProvider when GROQ_API or GROQ_API_KEY is present", async () => {
+    const { getAIProvider, GroqProvider } = await import("../provider");
+    const prev = process.env.GROQ_API;
+    try {
+      process.env.GROQ_API = "gsk_test_key_mock_12345";
+      const p = getAIProvider();
+      expect(p).toBeInstanceOf(GroqProvider);
+      expect(p.isMock).toBe(false);
+      expect(p.name).toContain("Groq");
+    } finally {
+      process.env.GROQ_API = prev;
+    }
+  });
+
+  it("diagnoses cognitive misconceptions with mental model fix and memory anchors", async () => {
+    const { CognitiveDiagnosisSchema } = await import("../provider");
+    const diagnosis = await provider.diagnoseCognitiveMisconception({
+      questionText: "What does list.sort() return in Python?",
+      userAnswer: "The sorted list",
+      correctAnswer: "None (modifies in-place)",
+      topicTitle: "Python In-Place Mutation",
+    });
+
+    expect(diagnosis.misconception_type).toBeDefined();
+    expect(diagnosis.root_cause_analysis).toBeDefined();
+    expect(diagnosis.mental_model_fix).toBeDefined();
+    expect(diagnosis.memory_anchor).toBeDefined();
+    expect(diagnosis.immediate_challenge).toBeDefined();
+
+    const parsed = CognitiveDiagnosisSchema.parse(diagnosis);
+    expect(parsed.misconception_type.length).toBeGreaterThan(0);
+  });
+
+  it("conducts Socratic dialogue with guiding questions", async () => {
+    const { SocraticTurnSchema } = await import("../provider");
+    const turn = await provider.conductSocraticDialogue({
+      topic: sampleTopic,
+      userMessage: "Can I use break inside an if statement without a loop?",
+      conversationHistory: [],
+      studentMasteryScore: 40,
+    });
+
+    expect(turn.reply).toBeDefined();
+    expect(turn.pedagogical_goal).toBeDefined();
+    expect(turn.guiding_question).toBeDefined();
+
+    const parsed = SocraticTurnSchema.parse(turn);
+    expect(parsed.guiding_question.length).toBeGreaterThan(0);
+  });
+
+  it("generates adaptive quizzes aligned with mastery bands", async () => {
+    const beginnerQuiz = await provider.generateAdaptiveQuiz(sampleTopic, 30, 2);
+    expect(beginnerQuiz.length).toBe(2);
+    expect(beginnerQuiz[0].difficulty).toBe("beginner");
+
+    const advancedQuiz = await provider.generateAdaptiveQuiz(sampleTopic, 85, 2);
+    expect(advancedQuiz.length).toBe(2);
+    expect(advancedQuiz[0].difficulty).toBe("advanced");
+  });
 });
+

@@ -13,6 +13,7 @@ import {
   BookOpen,
   Calendar,
   Sparkles,
+  Brain,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +28,33 @@ export default function AssessmentResultsPage() {
   const [attempt, setAttempt] = useState<QuizAttemptResult | null>(null);
   const [topic, setTopic] = useState<Topic | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [diagnoses, setDiagnoses] = useState<Record<string, any>>({});
+  const [loadingDiagnosis, setLoadingDiagnosis] = useState<Record<string, boolean>>({});
+
+  const handleDiagnose = async (questionId: string, resp: any) => {
+    if (diagnoses[questionId] || loadingDiagnosis[questionId]) return;
+    setLoadingDiagnosis((prev) => ({ ...prev, [questionId]: true }));
+    try {
+      const res = await fetch("/api/ai/diagnose", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          questionText: resp.question_text,
+          userAnswer: resp.user_answer,
+          correctAnswer: resp.correct_answer,
+          topicTitle: topic?.title || "Educational Assessment",
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDiagnoses((prev) => ({ ...prev, [questionId]: data.diagnosis }));
+      }
+    } catch (err) {
+      console.error("Diagnosis error:", err);
+    } finally {
+      setLoadingDiagnosis((prev) => ({ ...prev, [questionId]: false }));
+    }
+  };
 
   useEffect(() => {
     const loadResult = async () => {
@@ -191,6 +219,54 @@ export default function AssessmentResultsPage() {
             <div className="p-3.5 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800/60 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
               💡 <strong>Explanation:</strong> {resp.explanation}
             </div>
+
+            {/* Cognitive Diagnosis for Incorrect Questions */}
+            {!resp.is_correct && (
+              <div className="pt-1">
+                {!diagnoses[resp.question_id] ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={loadingDiagnosis[resp.question_id]}
+                    onClick={() => handleDiagnose(resp.question_id, resp)}
+                    className="text-xs border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
+                  >
+                    <Brain className="w-3.5 h-3.5 mr-1 text-indigo-500" />
+                    {loadingDiagnosis[resp.question_id]
+                      ? "Diagnosing Cognitive Misconception..."
+                      : "Deep Cognitive Misconception Breakdown"}
+                  </Button>
+                ) : (
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-indigo-50/80 via-white to-purple-50/80 dark:from-slate-900 dark:via-slate-900/90 dark:to-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 space-y-2.5 text-xs shadow-2xs">
+                    <div className="flex items-center justify-between border-b border-indigo-100 dark:border-indigo-900/60 pb-2">
+                      <div className="flex items-center gap-1.5 font-bold text-indigo-700 dark:text-indigo-300">
+                        <Brain className="w-4 h-4" />
+                        <span>Cognitive Breakdown: {diagnoses[resp.question_id].misconception_type}</span>
+                      </div>
+                      <Badge variant="purple" size="sm">Metacognitive Calibration</Badge>
+                    </div>
+
+                    <p className="text-slate-700 dark:text-slate-300">
+                      <strong>Root Cause:</strong> {diagnoses[resp.question_id].root_cause_analysis}
+                    </p>
+
+                    <div className="p-2.5 rounded-lg bg-indigo-100/50 dark:bg-indigo-950/50 text-indigo-900 dark:text-indigo-200 border border-indigo-200/50">
+                      <strong>Mental Model Fix:</strong> {diagnoses[resp.question_id].mental_model_fix}
+                    </div>
+
+                    <div className="flex items-start gap-1.5 text-[11px] text-slate-600 dark:text-slate-400">
+                      <span>🧠</span>
+                      <span><strong>Memory Anchor:</strong> {diagnoses[resp.question_id].memory_anchor}</span>
+                    </div>
+
+                    <div className="text-[11px] text-amber-700 dark:text-amber-300 font-medium bg-amber-50 dark:bg-amber-950/30 p-2 rounded-lg border border-amber-200/50">
+                      ⚡ <strong>Immediate Micro-Challenge:</strong> {diagnoses[resp.question_id].immediate_challenge}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </Card>
         ))}
       </div>
